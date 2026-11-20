@@ -1,6 +1,7 @@
 package com.benji.goblinos.registry;
 
 import com.benji.goblinos.Goblinos;
+import com.benji.goblinos.common.item.DirtBallItem;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.*;
 import net.minecraftforge.eventbus.api.IEventBus;
@@ -19,7 +20,7 @@ public final class ModItems {
  //  public static final RegistryObject<Item> WAR_CORE = ITEMS.register("war_core", () -> new WarCoreItem(new Item.Properties().stacksTo(1)));
    public static final RegistryObject<Item> SNOTLING_SPAWN_EGG = ITEMS.register("snotling_spawn_egg", () -> new net.minecraftforge.common.ForgeSpawnEggItem(ModEntities.SNOTLING, 0xFFFFFF, 0xFFFFFF, new Item.Properties()));
 
-    public static final RegistryObject<Item> DIRT_BALL = ITEMS.register("dirt_ball", () -> new Item(new Item.Properties()));
+    public static final RegistryObject<Item> DIRT_BALL = ITEMS.register("dirt_ball", () -> new DirtBallItem(new Item.Properties().stacksTo(16)));
 
     private ModItems() {
     }

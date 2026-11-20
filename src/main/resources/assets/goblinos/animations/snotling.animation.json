@@ -11440,6 +11440,11 @@
 					"scale": {
 						"vector": [0, 0, 0]
 					}
+				},
+				"Snotling": {
+					"position": {
+						"vector": [0, -6, 0]
+					}
 				}
 			}
 		},
