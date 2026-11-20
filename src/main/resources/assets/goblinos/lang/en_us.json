@@ -1,8 +1,10 @@
 {
   "entity.goblinos.snotling": "Snotling",
+  "entity.goblinos.dirt_ball": "Dirt Ball",
 
   "item.goblinos.snotling_spawn_egg": "Snotling Spawn Egg",
+  "item.goblinos.dirt": "Dirt Ball",
 
-  "creativetab.goblinos.main": "Goblinos"
+  "creativetab.goblinos.main": "Goblin Era"
 
 }

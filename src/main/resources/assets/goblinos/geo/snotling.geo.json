@@ -116,20 +116,20 @@
 					]
 				},
 				{
-					"name": "funny",
+					"name": "mouth",
 					"parent": "head",
-					"pivot": [-2, 12, -8],
+					"pivot": [0, 13, -3.1],
 					"cubes": [
 						{
-							"origin": [-4, 12, -3],
-							"size": [8, 6, 6],
+							"origin": [-3, 12, -3.1],
+							"size": [6, 2, 0],
 							"uv": {
-								"north": {"uv": [0, 12], "uv_size": [8, 6]},
-								"east": {"uv": [16, 0], "uv_size": [6, 6]},
-								"south": {"uv": [0, 6], "uv_size": [8, 6]},
-								"west": {"uv": [22, 0], "uv_size": [-6, 6]},
-								"up": {"uv": [8, 0], "uv_size": [8, 6]},
-								"down": {"uv": [16, 12], "uv_size": [-8, -6]}
+								"north": {"uv": [1, 16], "uv_size": [6, 2]},
+								"east": {"uv": [26, 26], "uv_size": [6, 6]},
+								"south": {"uv": [24, 26], "uv_size": [8, 6]},
+								"west": {"uv": [32, 26], "uv_size": [-6, 6]},
+								"up": {"uv": [24, 26], "uv_size": [8, 6]},
+								"down": {"uv": [24, 32], "uv_size": [8, -6]}
 							}
 						}
 					]
