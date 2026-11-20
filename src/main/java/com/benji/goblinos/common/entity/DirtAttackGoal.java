@@ -147,15 +147,25 @@ final class DirtAttackGoal extends Goal {
     }
 
     private void walkAway() {
+        var navigation = mob.getNavigation();
         double gap = MAX_THROW_DISTANCE + 3.0D - mob.distanceTo(target);
+
         if (gap <= 0.5D) {
-            mob.getNavigation().stop();
+            navigation.stop();
+            mob.pose(Pose.NONE);
             return;
         }
-        if (mob.tickCount < nextPathTick) return;
-        nextPathTick = mob.tickCount + 12;
-        Path path = mob.retreatPath(target, Math.min(5.0D, gap));
-        if (path != null) mob.getNavigation().moveTo(path, 0.8D);
+
+        if (mob.tickCount >= nextPathTick) {
+            nextPathTick = mob.tickCount + 12;
+
+            Path path = mob.retreatPath(target, Math.min(5.0D, gap));
+            if (path != null) {
+                navigation.moveTo(path, 1.45D);
+            }
+        }
+
+        mob.pose(navigation.isDone() ? Pose.NONE : Pose.RUN);
     }
 
     private boolean positionForThrow(boolean armed) {
