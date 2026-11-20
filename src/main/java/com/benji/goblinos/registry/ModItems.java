@@ -17,6 +17,7 @@ public final class ModItems {
    // public static final RegistryObject<Item> PIPUS_ITEM = ITEMS.register("pipus", () -> new BlockItem(ModBlocks.PIPUS.get(), new Item.Properties()));
   // public static final RegistryObject<Item> WINDMILL_ITEM = ITEMS.register("windmill", () -> new GeoBlockItem(ModBlocks.WINDMILL.get(), new Item.Properties(), ResourceLocation.fromNamespaceAndPath(MODID, "geo/windmill.geo.json"), ResourceLocation.fromNamespaceAndPath(MODID, "textures/block/windmill.png"), ResourceLocation.fromNamespaceAndPath(MODID, "animations/windmill.animation.json"), ResourceLocation.fromNamespaceAndPath(MODID, "textures/block/empty.png")));
  //  public static final RegistryObject<Item> WAR_CORE = ITEMS.register("war_core", () -> new WarCoreItem(new Item.Properties().stacksTo(1)));
+   public static final RegistryObject<Item> SNOTLING_SPAWN_EGG = ITEMS.register("snotling_spawn_egg", () -> new net.minecraftforge.common.ForgeSpawnEggItem(ModEntities.SNOTLING, 0xFFFFFF, 0xFFFFFF, new Item.Properties()));
 
     private ModItems() {
     }

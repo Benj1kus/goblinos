@@ -1,5 +1,8 @@
 package com.benji.goblinos;
 
+import com.benji.goblinos.common.entity.SnotlingEntity;
+import com.benji.goblinos.registry.ModEntities;
+import com.benji.goblinos.registry.ModItems;
 import com.mojang.logging.LogUtils;
 import net.minecraft.core.particles.ParticleType;
 import net.minecraft.core.registries.Registries;
@@ -46,10 +49,10 @@ public class Goblinos {
     public static final DeferredRegister<CreativeModeTab> CREATIVE_MODE_TABS = DeferredRegister.create(Registries.CREATIVE_MODE_TAB, MODID);
 
     public static final RegistryObject<CreativeModeTab> MAIN_TAB = CREATIVE_MODE_TABS.register("main_tab", () -> CreativeModeTab.builder()
-            .icon(() -> new ItemStack(Items.DIAMOND))
+            .icon(() -> new ItemStack(ModItems.SNOTLING_SPAWN_EGG.get()))
             .title(Component.translatable("creativetab." + MODID + ".main"))
             .displayItems((parameters, output) -> {
-                for (RegistryObject<Item> item : ITEMS.getEntries()) {
+                for (RegistryObject<Item> item : ModItems.ITEMS.getEntries()) {
                     output.accept(item.get());
                 }
             })
@@ -58,6 +61,8 @@ public class Goblinos {
     public Goblinos(FMLJavaModLoadingContext context) {
         IEventBus modEventBus = context.getModEventBus();
 
+        ModEntities.ENTITIES.register(modEventBus);
+        ModItems.register(modEventBus);
         BLOCKS.register(modEventBus);
         ITEMS.register(modEventBus);
         BLOCK_ENTITIES.register(modEventBus);
@@ -87,6 +92,8 @@ public class Goblinos {
 
         @SubscribeEvent
         public static void registerAttributes(EntityAttributeCreationEvent event) {
+            event.put(ModEntities.SNOTLING.get(), SnotlingEntity.createAttributes().build());
+
         }
     }
 

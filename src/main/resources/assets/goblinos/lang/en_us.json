@@ -1,3 +1,8 @@
 {
+  "entity.goblinos.snotling": "Snotling",
+
+  "item.goblinos.snotling_spawn_egg": "Snotling Spawn Egg",
+
+  "creativetab.goblinos.main": "Goblinos"
 
 }

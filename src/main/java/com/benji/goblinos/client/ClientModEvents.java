@@ -1,6 +1,8 @@
 package com.benji.goblinos.client;
 
 import com.benji.goblinos.Goblinos;
+import com.benji.goblinos.client.renderer.SnotlingRenderer;
+import com.benji.goblinos.registry.ModEntities;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.client.event.EntityRenderersEvent;
 import net.minecraftforge.client.event.RegisterDimensionSpecialEffectsEvent;
@@ -17,6 +19,7 @@ public class ClientModEvents {
     // public static void clientSetup(FMLClientSetupEvent event) {
     //     event.enqueueWork(() -> MinecraftForge.EVENT_BUS.register(AzumaalMegaBeamCameraShake.class));
     //  }
+
 
     //   @SubscribeEvent
     //   public static void registerDimensionEffects(
@@ -49,4 +52,12 @@ public class ClientModEvents {
     //          com.benji.oasiso.client.renderer.LieBlockRenderer::new
     //    );
     //  }
+
+  @SubscribeEvent
+  public static void registerRenderers(EntityRenderersEvent.RegisterRenderers event) {
+    event.registerEntityRenderer(
+           ModEntities.SNOTLING.get(),
+            SnotlingRenderer::new
+  );
+  }
 }
