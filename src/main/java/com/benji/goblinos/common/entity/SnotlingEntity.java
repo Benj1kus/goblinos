@@ -1,6 +1,12 @@
 package com.benji.goblinos.common.entity;
 
 import java.util.EnumSet;
+import com.benji.goblinos.Goblinos;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraftforge.event.entity.living.LivingDeathEvent;
+import net.minecraftforge.eventbus.api.EventPriority;
+import net.minecraftforge.eventbus.api.SubscribeEvent;
+import net.minecraftforge.fml.common.Mod;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
@@ -33,11 +39,12 @@ import software.bernie.geckolib.core.animation.AnimationController;
 import software.bernie.geckolib.core.animation.RawAnimation;
 import software.bernie.geckolib.util.GeckoLibUtil;
 
+@Mod.EventBusSubscriber(modid = Goblinos.MODID)
 public class SnotlingEntity extends Monster implements GeoEntity {
     private static final EntityDataAccessor<Boolean> CLIMBING = SynchedEntityData.defineId(SnotlingEntity.class, EntityDataSerializers.BOOLEAN);
 
-    private static final double START_CLIMB_TICK = 0.625D * 20.0D;
-    private static final double ON_BLOCK_TICK = 1.5833D * 20.0D;
+    private static final double START_CLIMB_TICK = 0.75D * 20.0D;
+    private static final double ON_BLOCK_TICK = 1.9167D * 20.0D;
     private static final int JUMP_DURATION_TICKS = 40;
     private static final RawAnimation JUMP = RawAnimation.begin().thenPlayAndHold("jump");
 
@@ -49,11 +56,59 @@ public class SnotlingEntity extends Monster implements GeoEntity {
     private static final int TALK_CYCLE_TICKS = 60;
     private static final EntityDataAccessor<Integer> COMBAT_POSE = SynchedEntityData.defineId(SnotlingEntity.class, EntityDataSerializers.INT);
     java.util.UUID pendingDirt;
-    Boolean dirtHit;
+    static final int MOCKERY_TICKS = 120;
+    private static final double MOCKERY_RADIUS = 10.0D;
+    Boolean celebrateShot;
+    private Vec3 deathPosition;
+    private long laughUntil;
+
+    @SubscribeEvent(priority = EventPriority.LOWEST)
+    public static void onPlayerDeath(LivingDeathEvent event) {
+        if (!(event.getEntity() instanceof ServerPlayer player)) return;
+
+        for (SnotlingEntity mob : player.level().getEntitiesOfClass(SnotlingEntity.class,
+                player.getBoundingBox().inflate(MOCKERY_RADIUS),
+                other -> other.isAlive() && other.distanceToSqr(player) <= MOCKERY_RADIUS * MOCKERY_RADIUS)) {
+            mob.deathPosition = player.position();
+            mob.laughUntil = mob.level().getGameTime() + MOCKERY_TICKS;
+            mob.endConversation();
+        }
+    }
+
+    private class DeathMockeryGoal extends Goal {
+        DeathMockeryGoal() {
+            setFlags(EnumSet.of(Flag.MOVE, Flag.LOOK));
+        }
+
+        @Override
+        public boolean canUse() {
+            return deathPosition != null && level().getGameTime() < laughUntil;
+        }
+
+        @Override
+        public void start() {
+            getNavigation().stop();
+            pose(DirtAttackGoal.Pose.MOCK);
+        }
+
+        @Override
+        public void tick() {
+            getLookControl().setLookAt(deathPosition.x, deathPosition.y, deathPosition.z);
+        }
+
+        @Override
+        public void stop() {
+            deathPosition = null;
+            pose(DirtAttackGoal.Pose.NONE);
+        }
+    }
+
     void dirtResult(java.util.UUID shot, boolean hit) {
         if (shot.equals(pendingDirt)) {
             pendingDirt = null;
-            dirtHit = hit;
+            celebrateShot = hit && !level().getEntitiesOfClass(SnotlingEntity.class,
+                    getBoundingBox().inflate(MOCKERY_RADIUS),
+                    other -> other != this && other.isAlive() && distanceToSqr(other) <= MOCKERY_RADIUS * MOCKERY_RADIUS).isEmpty();
         }
     }
 
@@ -106,6 +161,7 @@ public class SnotlingEntity extends Monster implements GeoEntity {
 
     @Override
     protected void registerGoals() {
+        this.goalSelector.addGoal(0, new DeathMockeryGoal());
         this.goalSelector.addGoal(0, new FloatGoal(this));
         this.targetSelector.addGoal(1, new NearestAttackableTargetGoal<>(this, Player.class, true, false));
         this.goalSelector.addGoal(1, new FleeOnceGoal());
@@ -189,7 +245,7 @@ public class SnotlingEntity extends Monster implements GeoEntity {
     }
 
     private boolean canSocialize() {
-        return isAlive() && !isRemoved() && !isNoAi() && !isPassenger() && !isClimbing() && !isFleeing() && !isInWaterOrBubble() && !isInLava() && getTarget() == null && hurtTime == 0;
+        return level().getGameTime() >= laughUntil && isAlive() && !isRemoved() && !isNoAi() && !isPassenger() && !isClimbing() && !isFleeing() && !isInWaterOrBubble() && !isInLava() && getTarget() == null && hurtTime == 0;
     }
 
     private void endConversation() {
@@ -512,7 +568,7 @@ public class SnotlingEntity extends Monster implements GeoEntity {
         AnimationController<SnotlingEntity> controller = new AnimationController<>(this, "controller", MOVEMENT_BLEND_TICKS, event -> {
             int mode = isClimbing() ? 2 : isInWaterOrBubble() ? 3 : isTalking() ? 10 + entityData.get(TALK_VARIANT) : isFleeing() ? 20 + entityData.get(RUN_VARIANT) : (event.isMoving() ? 1 : 0);
             int combat = entityData.get(COMBAT_POSE);
-            if (combat != 0 && !isClimbing() && !isInWaterOrBubble() && !isFleeing()) mode = 30 + combat;
+            if (combat != 0 && !isClimbing() && (combat == DirtAttackGoal.Pose.MOCK.ordinal() || (!isInWaterOrBubble() && !isFleeing()))) mode = 30 + combat;
             var ctrl = event.getController();
 
             if (mode != animationMode) {

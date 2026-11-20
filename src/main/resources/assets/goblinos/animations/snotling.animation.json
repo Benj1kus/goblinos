@@ -3562,8 +3562,8 @@
 				}
 			},
 			"timeline": {
-				"0.625": "start_climb;",
-				"1.5833": "on_block;"
+				"0.75": "start_climb;",
+				"1.9167": "on_block;"
 			}
 		},
 		"anxiety": {

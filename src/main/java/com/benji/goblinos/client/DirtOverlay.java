@@ -21,7 +21,7 @@ import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent;
 
 @Mod.EventBusSubscriber(modid = Goblinos.MODID, bus = Mod.EventBusSubscriber.Bus.MOD, value = Dist.CLIENT)
 public final class DirtOverlay {
-    private static final int SIZE = 100, HOLD = 60, FADE = 15;
+    private static final int SIZE = 150, HOLD = 60, FADE = 15;
 
     private record Mark(float x, float y, ResourceLocation texture, long start) {
     }

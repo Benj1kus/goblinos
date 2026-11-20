@@ -29,7 +29,7 @@ final class DirtAttackGoal extends Goal {
         }
     }
 
-    private enum Phase {RANGE, TAUNT, SEARCH, AIM, THROW, COOLDOWN, CELEBRATE}
+    private enum Phase {RANGE, SEARCH, AIM, THROW, COOLDOWN, CELEBRATE}
 
     private static final int ATTACK_COOLDOWN_TICKS = 100;
     private long nextAttackTime;
@@ -81,7 +81,7 @@ final class DirtAttackGoal extends Goal {
         mob.getNavigation().stop();
         mob.pose(Pose.NONE);
         mob.pendingDirt = null;
-        mob.dirtHit = null;
+        mob.celebrateShot = null;
         target = null;
     }
 
@@ -93,7 +93,7 @@ final class DirtAttackGoal extends Goal {
         mob.getNavigation().stop();
         switch (next) {
             case RANGE -> mob.pose(Pose.NONE);
-            case TAUNT, CELEBRATE -> mob.pose(Pose.MOCK);
+            case CELEBRATE -> mob.pose(Pose.MOCK);
             case SEARCH -> mob.pose(Pose.SEARCH);
             case AIM -> {
                 ready = mob.getRandom().nextBoolean() ? Pose.READY : Pose.READY2;
@@ -113,11 +113,8 @@ final class DirtAttackGoal extends Goal {
         switch (phase) {
             case RANGE -> {
                 if (positionForThrow(false)) {
-                    enter(mob.getRandom().nextFloat() < 0.30F ? Phase.TAUNT : Phase.SEARCH);
+                    enter(Phase.SEARCH);
                 }
-            }
-            case TAUNT -> {
-                if (age >= 80) enter(Phase.SEARCH);
             }
             case SEARCH -> {
                 if (age >= 30) enter(Phase.AIM);
@@ -131,17 +128,22 @@ final class DirtAttackGoal extends Goal {
                     return;
                 }
                 if (age == RELEASE_TICK) launch();
-                if (age >= THROW_TICKS) enter(Phase.COOLDOWN);
+                if (age >= THROW_TICKS && (mob.celebrateShot != null || mob.level().getGameTime() >= nextAttackTime)) {
+                    finishShot();
+                }
             }
             case COOLDOWN -> {
                 if (mob.level().getGameTime() >= nextAttackTime) {
-                    finishShot();
+                    enter(Phase.RANGE);
                 } else {
                     walkAway();
                 }
             }
             case CELEBRATE -> {
-                if (age >= 120) enter(Phase.RANGE);
+                if (age >= SnotlingEntity.MOCKERY_TICKS) {
+                    nextAttackTime = mob.level().getGameTime() + ATTACK_COOLDOWN_TICKS;
+                    enter(Phase.COOLDOWN);
+                }
             }
         }
     }
@@ -212,7 +214,7 @@ final class DirtAttackGoal extends Goal {
         Vec3 delta = target.getBoundingBox().getCenter().subtract(ball.position());
         ball.shoot(delta.x, delta.y + delta.horizontalDistance() * 0.025, delta.z, 1.1F, 2F);
         mob.pendingDirt = ball.getUUID();
-        mob.dirtHit = null;
+        mob.celebrateShot = null;
         if (mob.level().addFreshEntity(ball)) {
             nextAttackTime = mob.level().getGameTime() + ATTACK_COOLDOWN_TICKS;
         } else {
@@ -221,9 +223,9 @@ final class DirtAttackGoal extends Goal {
     }
 
     private void finishShot() {
-        boolean hit = Boolean.TRUE.equals(mob.dirtHit);
+        boolean celebrate = Boolean.TRUE.equals(mob.celebrateShot);
         mob.pendingDirt = null;
-        mob.dirtHit = null;
-        enter(hit ? Phase.CELEBRATE : Phase.RANGE);
+        mob.celebrateShot = null;
+        enter(celebrate ? Phase.CELEBRATE : Phase.COOLDOWN);
     }
 }
