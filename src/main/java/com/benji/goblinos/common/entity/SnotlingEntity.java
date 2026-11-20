@@ -7,6 +7,7 @@ import net.minecraftforge.event.entity.living.LivingDeathEvent;
 import net.minecraftforge.eventbus.api.EventPriority;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
+import net.minecraft.world.entity.ai.goal.LookAtPlayerGoal;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
@@ -168,6 +169,7 @@ public class SnotlingEntity extends Monster implements GeoEntity {
         this.goalSelector.addGoal(2, new ConversationGoal());
         this.goalSelector.addGoal(3, new DirtAttackGoal(this));
         this.goalSelector.addGoal(4, new WaterAvoidingRandomStrollGoal(this, 0.8D));
+        this.goalSelector.addGoal(5, new LookAtPlayerGoal(this, Player.class, 8.0F));
     }
 
     @Override
