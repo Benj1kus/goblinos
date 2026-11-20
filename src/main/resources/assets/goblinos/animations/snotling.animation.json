@@ -9524,6 +9524,9 @@
 						}
 					}
 				}
+			},
+			"timeline": {
+				"0.2917": "dirt_throw;"
 			}
 		},
 		"mockery": {
