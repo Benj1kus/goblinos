@@ -2,6 +2,8 @@ package com.benji.goblinos.client;
 
 import com.benji.goblinos.Goblinos;
 import com.benji.goblinos.client.renderer.SnotlingRenderer;
+import com.benji.goblinos.registry.ModBlockEntities;
+import com.benji.goblinos.registry.ModBlocks;
 import com.benji.goblinos.registry.ModEntities;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.client.event.EntityRenderersEvent;
@@ -59,5 +61,9 @@ public class ClientModEvents {
            ModEntities.SNOTLING.get(),
             SnotlingRenderer::new
   );
+      event.registerBlockEntityRenderer(
+              ModBlockEntities.CLEAN_GEO_BE.get(),
+              com.benji.goblinos.client.renderer.TentRenderer::new
+        );
   }
 }

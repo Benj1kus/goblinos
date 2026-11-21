@@ -4,6 +4,11 @@
 
   "item.goblinos.snotling_spawn_egg": "Snotling Spawn Egg",
   "item.goblinos.dirt_ball": "Dirt Ball",
+  "item.goblinos.tent_fabric": "Tent Fabric",
+  "item.goblinos.dirt_worm": "Worm",
+  "item.goblinos.boots": "Leather Boot",
+
+  "block.goblinos.tent": "Tent",
 
   "creativetab.goblinos.main": "Goblin Era"
 

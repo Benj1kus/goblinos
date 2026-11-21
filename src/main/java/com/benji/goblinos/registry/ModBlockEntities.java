@@ -1,6 +1,7 @@
 package com.benji.goblinos.registry;
 
 import com.benji.goblinos.Goblinos;
+import com.benji.goblinos.common.block.entity.CleanGeoBlockEntity;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraftforge.eventbus.api.IEventBus;
 import net.minecraftforge.registries.DeferredRegister;
@@ -17,6 +18,8 @@ public final class ModBlockEntities {
 
     // public static final RegistryObject<BlockEntityType<ExampleSignBlockEntity>> EXAMPLE_SIGN_BE =
     //         BLOCK_ENTITIES.register("example_sign", () -> BlockEntityType.Builder.of(ExampleSignBlockEntity::new, ModBlocks.EXAMPLE_SIGN.get(), ModBlocks.EXAMPLE_WALL_SIGN.get()).build(null));
+
+    public static final RegistryObject<BlockEntityType<CleanGeoBlockEntity>> CLEAN_GEO_BE = BLOCK_ENTITIES.register("clean_geo", () -> BlockEntityType.Builder.of(CleanGeoBlockEntity::new, ModBlocks.TENT.get()).build(null));
 
     private ModBlockEntities() {
     }

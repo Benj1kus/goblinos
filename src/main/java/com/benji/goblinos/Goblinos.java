@@ -1,8 +1,7 @@
 package com.benji.goblinos;
 
 import com.benji.goblinos.common.entity.SnotlingEntity;
-import com.benji.goblinos.registry.ModEntities;
-import com.benji.goblinos.registry.ModItems;
+import com.benji.goblinos.registry.*;
 import com.mojang.logging.LogUtils;
 import net.minecraft.core.particles.ParticleType;
 import net.minecraft.core.registries.Registries;
@@ -63,11 +62,10 @@ public class Goblinos {
 
         ModEntities.ENTITIES.register(modEventBus);
         ModItems.register(modEventBus);
-        BLOCKS.register(modEventBus);
-        ITEMS.register(modEventBus);
-        BLOCK_ENTITIES.register(modEventBus);
-        ENTITIES.register(modEventBus);
-        MOB_EFFECTS.register(modEventBus);
+        ModBlockEntities.register(modEventBus);
+        ModBlocks.register(modEventBus);
+        ModEffects.register(modEventBus);
+        ModSounds.SOUNDS.register(modEventBus);
         ENCHANTMENTS.register(modEventBus);
         PARTICLES.register(modEventBus);
         STRUCTURE_TYPES.register(modEventBus);
