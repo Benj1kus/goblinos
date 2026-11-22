@@ -1,0 +1,7 @@
+{
+  "type": "goblinos:snot_camp",
+  "biomes": "minecraft:plains",
+  "step": "surface_structures",
+  "spawn_overrides": {},
+  "terrain_adaptation": "none"
+}

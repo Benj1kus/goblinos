@@ -1,6 +1,7 @@
 package com.benji.goblinos;
 
 import com.benji.goblinos.common.entity.SnotlingEntity;
+import com.benji.goblinos.common.worldgen.SnotCampStructure;
 import com.benji.goblinos.registry.*;
 import com.mojang.logging.LogUtils;
 import net.minecraft.core.particles.ParticleType;
@@ -45,6 +46,9 @@ public class Goblinos {
     public static final DeferredRegister<Enchantment> ENCHANTMENTS = DeferredRegister.create(ForgeRegistries.ENCHANTMENTS, MODID);
     public static final DeferredRegister<ParticleType<?>> PARTICLES = DeferredRegister.create(ForgeRegistries.PARTICLE_TYPES, MODID);
     public static final DeferredRegister<StructureType<?>> STRUCTURE_TYPES = DeferredRegister.create(Registries.STRUCTURE_TYPE, MODID);
+    public static final RegistryObject<StructureType<SnotCampStructure>> SNOT_CAMP =
+            STRUCTURE_TYPES.register("snot_camp", () -> () -> SnotCampStructure.CODEC);
+
     public static final DeferredRegister<CreativeModeTab> CREATIVE_MODE_TABS = DeferredRegister.create(Registries.CREATIVE_MODE_TAB, MODID);
 
     public static final RegistryObject<CreativeModeTab> MAIN_TAB = CREATIVE_MODE_TABS.register("main_tab", () -> CreativeModeTab.builder()
