@@ -1,6 +1,7 @@
 package com.benji.goblinos.common.entity;
 
 import java.util.EnumSet;
+
 import com.benji.goblinos.Goblinos;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraftforge.event.entity.living.LivingDeathEvent;
@@ -10,6 +11,9 @@ import net.minecraftforge.fml.common.Mod;
 import net.minecraft.world.entity.ai.goal.LookAtPlayerGoal;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.entity.ai.util.DefaultRandomPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.ai.goal.Goal;
@@ -67,12 +71,111 @@ public class SnotlingEntity extends Monster implements GeoEntity {
     public static void onPlayerDeath(LivingDeathEvent event) {
         if (!(event.getEntity() instanceof ServerPlayer player)) return;
 
-        for (SnotlingEntity mob : player.level().getEntitiesOfClass(SnotlingEntity.class,
-                player.getBoundingBox().inflate(MOCKERY_RADIUS),
-                other -> other.isAlive() && other.distanceToSqr(player) <= MOCKERY_RADIUS * MOCKERY_RADIUS)) {
+        for (SnotlingEntity mob : player.level().getEntitiesOfClass(SnotlingEntity.class, player.getBoundingBox().inflate(MOCKERY_RADIUS), other -> other.isAlive() && other.distanceToSqr(player) <= MOCKERY_RADIUS * MOCKERY_RADIUS)) {
             mob.deathPosition = player.position();
             mob.laughUntil = mob.level().getGameTime() + MOCKERY_TICKS;
             mob.endConversation();
+        }
+    }
+
+    private static final int TENT_RADIUS = 10;
+    private static final int TENT_FORGET_DISTANCE = 48;
+    private static final ResourceLocation TENT_ID = ResourceLocation.fromNamespaceAndPath("goblinos", "tent");
+    private static final ResourceLocation TENT_PART_ID = ResourceLocation.fromNamespaceAndPath("goblinos", "tent_part");
+    private BlockPos homeTent;
+    private int nextTentCheck;
+
+    private boolean isTent(BlockPos pos) {
+        var id = BuiltInRegistries.BLOCK.getKey(level().getBlockState(pos).getBlock());
+        return TENT_ID.equals(id) || TENT_PART_ID.equals(id);
+    }
+
+    private void updateTent() {
+        if (homeTent != null && tentDistanceSqr(position()) > TENT_FORGET_DISTANCE * TENT_FORGET_DISTANCE) {
+            homeTent = null;
+        }
+        if (tickCount < nextTentCheck) return;
+        nextTentCheck = tickCount + 60 + random.nextInt(41);
+        if (homeTent != null && (!level().hasChunkAt(homeTent) || isTent(homeTent))) return;
+
+        homeTent = null;
+        BlockPos here = blockPosition();
+        double best = TENT_RADIUS * TENT_RADIUS;
+        for (BlockPos pos : BlockPos.betweenClosed(here.offset(-TENT_RADIUS, -4, -TENT_RADIUS), here.offset(TENT_RADIUS, 4, TENT_RADIUS))) {
+            double distance = position().distanceToSqr(Vec3.atBottomCenterOf(pos));
+            if (distance <= best && level().hasChunkAt(pos) && isTent(pos)) {
+                best = distance;
+                homeTent = pos.immutable();
+            }
+        }
+    }
+
+    private double tentDistanceSqr(Vec3 pos) {
+        return pos.distanceToSqr(Vec3.atBottomCenterOf(homeTent));
+    }
+
+    private boolean insideCamp(Vec3 pos) {
+        return homeTent == null || tentDistanceSqr(pos) <= TENT_RADIUS * TENT_RADIUS;
+    }
+
+    private boolean pathInsideCamp(Path path) {
+        if (path == null) return false;
+        if (homeTent == null) return true;
+        for (int i = path.getNextNodeIndex(); i < path.getNodeCount(); i++) {
+            if (!insideCamp(path.getEntityPosAtNode(this, i))) return false;
+        }
+        return true;
+    }
+
+    private class CampStrollGoal extends WaterAvoidingRandomStrollGoal {
+        CampStrollGoal() {
+            super(SnotlingEntity.this, 0.8D);
+        }
+
+        @Override
+        protected Vec3 getPosition() {
+            if (homeTent == null) return super.getPosition();
+            if (!insideCamp(position())) return null;
+            for (int i = 0; i < 4; i++) {
+                Vec3 spot = super.getPosition();
+                if (spot != null && insideCamp(spot) && pathInsideCamp(getNavigation().createPath(BlockPos.containing(spot), 0)))
+                    return spot;
+            }
+            return null;
+        }
+
+        @Override
+        public boolean canContinueToUse() {
+            return super.canContinueToUse() && insideCamp(position()) && (homeTent == null || pathInsideCamp(getNavigation().getPath()));
+        }
+    }
+
+    private class ReturnToTentGoal extends Goal {
+        private int nextAttempt;
+
+        ReturnToTentGoal() {
+            setFlags(EnumSet.of(Flag.MOVE));
+        }
+
+        @Override
+        public boolean canUse() {
+            return getTarget() == null && !insideCamp(position()) && !isPassenger();
+        }
+
+        @Override
+        public void tick() {
+            if (homeTent == null || getTarget() != null || tickCount < nextAttempt || !getNavigation().isDone()) return;
+            nextAttempt = tickCount + 20;
+            Path path = getNavigation().createPath(homeTent, 5);
+            if (path != null && path.getEndNode() != null && tentDistanceSqr(Vec3.atBottomCenterOf(path.getEndNode().asBlockPos())) < tentDistanceSqr(position()) && getNavigation().moveTo(path, 1.0D))
+                return;
+            Vec3 step = DefaultRandomPos.getPosTowards(SnotlingEntity.this, 10, 5, Vec3.atBottomCenterOf(homeTent), Math.PI / 3);
+            if (step != null) getNavigation().moveTo(step.x, step.y, step.z, 1.0D);
+        }
+
+        @Override
+        public void stop() {
+            getNavigation().stop();
         }
     }
 
@@ -107,9 +210,7 @@ public class SnotlingEntity extends Monster implements GeoEntity {
     void dirtResult(java.util.UUID shot, boolean hit) {
         if (shot.equals(pendingDirt)) {
             pendingDirt = null;
-            celebrateShot = hit && !level().getEntitiesOfClass(SnotlingEntity.class,
-                    getBoundingBox().inflate(MOCKERY_RADIUS),
-                    other -> other != this && other.isAlive() && distanceToSqr(other) <= MOCKERY_RADIUS * MOCKERY_RADIUS).isEmpty();
+            celebrateShot = hit && !level().getEntitiesOfClass(SnotlingEntity.class, getBoundingBox().inflate(MOCKERY_RADIUS), other -> other != this && other.isAlive() && distanceToSqr(other) <= MOCKERY_RADIUS * MOCKERY_RADIUS).isEmpty();
         }
     }
 
@@ -168,13 +269,15 @@ public class SnotlingEntity extends Monster implements GeoEntity {
         this.goalSelector.addGoal(1, new FleeOnceGoal());
         this.goalSelector.addGoal(2, new ConversationGoal());
         this.goalSelector.addGoal(3, new DirtAttackGoal(this));
-        this.goalSelector.addGoal(4, new WaterAvoidingRandomStrollGoal(this, 0.8D));
-        this.goalSelector.addGoal(5, new LookAtPlayerGoal(this, Player.class, 8.0F));
+        this.goalSelector.addGoal(4, new ReturnToTentGoal());
+        this.goalSelector.addGoal(5, new CampStrollGoal());
+        this.goalSelector.addGoal(6, new LookAtPlayerGoal(this, Player.class, 8.0F));
     }
 
     @Override
     public void tick() {
         if (!level().isClientSide) {
+            updateTent();
             if (climbCooldown > 0) --climbCooldown;
             if (fleeRetryCooldown > 0) --fleeRetryCooldown;
             if (socialCooldown > 0) --socialCooldown;
@@ -237,17 +340,19 @@ public class SnotlingEntity extends Monster implements GeoEntity {
     @Override
     public void addAdditionalSaveData(CompoundTag tag) {
         super.addAdditionalSaveData(tag);
+        if (homeTent != null) tag.putLong("SnotlingTent", homeTent.asLong());
         tag.putBoolean("SnotlingHasFled", hasFled);
     }
 
     @Override
     public void readAdditionalSaveData(CompoundTag tag) {
         super.readAdditionalSaveData(tag);
+        homeTent = tag.contains("SnotlingTent") ? BlockPos.of(tag.getLong("SnotlingTent")) : null;
         hasFled = tag.getBoolean("SnotlingHasFled");
     }
 
     private boolean canSocialize() {
-        return level().getGameTime() >= laughUntil && isAlive() && !isRemoved() && !isNoAi() && !isPassenger() && !isClimbing() && !isFleeing() && !isInWaterOrBubble() && !isInLava() && getTarget() == null && hurtTime == 0;
+        return insideCamp(position()) && level().getGameTime() >= laughUntil && isAlive() && !isRemoved() && !isNoAi() && !isPassenger() && !isClimbing() && !isFleeing() && !isInWaterOrBubble() && !isInLava() && getTarget() == null && hurtTime == 0;
     }
 
     private void endConversation() {
@@ -361,9 +466,9 @@ public class SnotlingEntity extends Monster implements GeoEntity {
             if (socialCooldown > 0 || tickCount < nextSocialSearch || !canSocialize()) return false;
             nextSocialSearch = tickCount + 40 + random.nextInt(81);
             for (SnotlingEntity other : level().getEntitiesOfClass(SnotlingEntity.class, getBoundingBox().inflate(TALK_SEARCH_RADIUS), other -> other != SnotlingEntity.this && other.talkPartner == null && other.socialCooldown == 0 && other.canSocialize() && distanceToSqr(other) <= TALK_SEARCH_RADIUS * TALK_SEARCH_RADIUS)) {
-                if (!hasLineOfSight(other)) continue;
+                if (!insideCamp(other.position()) || !hasLineOfSight(other)) continue;
                 Path path = getNavigation().createPath(other, 0);
-                if (path == null || !path.canReach()) continue;
+                if (path == null || !path.canReach() || !pathInsideCamp(path)) continue;
                 talkPartner = other;
                 other.talkPartner = SnotlingEntity.this;
                 conversationLeader = true;
@@ -422,11 +527,17 @@ public class SnotlingEntity extends Monster implements GeoEntity {
                     Vec3 away = position().subtract(talkPartner.position()).multiply(1, 0, 1);
                     if (away.lengthSqr() < 0.001D) away = new Vec3(1, 0, 0);
                     Vec3 spot = talkPartner.position().add(away.normalize().scale(1.8D));
-                    getNavigation().moveTo(spot.x, spot.y, spot.z, 0.8D);
+                    approachForConversation(spot);
                 } else {
-                    getNavigation().moveTo(talkPartner, 0.8D);
+                    approachForConversation(talkPartner.position());
                 }
             }
+        }
+
+        private void approachForConversation(Vec3 spot) {
+            Path path = getNavigation().createPath(BlockPos.containing(spot), 0);
+            if (insideCamp(spot) && pathInsideCamp(path)) getNavigation().moveTo(path, 0.8D);
+            else endConversation();
         }
 
         private void chooseTalkAnimations() {
@@ -570,7 +681,8 @@ public class SnotlingEntity extends Monster implements GeoEntity {
         AnimationController<SnotlingEntity> controller = new AnimationController<>(this, "controller", MOVEMENT_BLEND_TICKS, event -> {
             int mode = isClimbing() ? 2 : isInWaterOrBubble() ? 3 : isTalking() ? 10 + entityData.get(TALK_VARIANT) : isFleeing() ? 20 + entityData.get(RUN_VARIANT) : (event.isMoving() ? 1 : 0);
             int combat = entityData.get(COMBAT_POSE);
-            if (combat != 0 && !isClimbing() && (combat == DirtAttackGoal.Pose.MOCK.ordinal() || (!isInWaterOrBubble() && !isFleeing()))) mode = 30 + combat;
+            if (combat != 0 && !isClimbing() && (combat == DirtAttackGoal.Pose.MOCK.ordinal() || (!isInWaterOrBubble() && !isFleeing())))
+                mode = 30 + combat;
             var ctrl = event.getController();
 
             if (mode != animationMode) {
