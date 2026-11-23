@@ -48,6 +48,25 @@ import software.bernie.geckolib.util.GeckoLibUtil;
 public class SnotlingEntity extends Monster implements GeoEntity {
     private static final EntityDataAccessor<Boolean> CLIMBING = SynchedEntityData.defineId(SnotlingEntity.class, EntityDataSerializers.BOOLEAN);
 
+    private static final EntityDataAccessor<Boolean> STUNNED = SynchedEntityData.defineId(SnotlingEntity.class, EntityDataSerializers.BOOLEAN);
+    private static final EntityDataAccessor<Boolean> LONG_FALL = SynchedEntityData.defineId(SnotlingEntity.class, EntityDataSerializers.BOOLEAN);
+    private static final RawAnimation FALL = RawAnimation.begin().thenPlayAndHold("fall");
+    private static final RawAnimation DEATH = RawAnimation.begin().thenPlayAndHold("death");
+    private static final RawAnimation STUN_SIT = RawAnimation.begin().thenPlayAndHold("stun_sit");
+    private static final RawAnimation STUN = RawAnimation.begin().thenLoop("stun");
+    private static final int STUN_SIT_MODE = 7;
+    private static final int STUN_LOOP_MODE = 4;
+    private static final int STUN_SIT_TO_LOOP_BLEND_TICKS = 6;
+    private static final int STUN_SIT_TICKS = 17;
+    private static final int DEATH_CLIP_TICKS = 18;
+    private static final int DEATH_BLEND_TICKS = 2;
+    private static final int STUN_CYCLE_TICKS = 60;
+    static final int ACTION_BLEND_TICKS = 4;
+    private static final EntityDataAccessor<Boolean> STUN_LOOP = SynchedEntityData.defineId(SnotlingEntity.class, EntityDataSerializers.BOOLEAN);
+    private int stunPhaseTicks;
+    private int stunCycles;
+    private float stunYaw, stunBodyYaw, stunHeadYaw, stunPitch;
+
     private static final double START_CLIMB_TICK = 0.75D * 20.0D;
     private static final double ON_BLOCK_TICK = 1.9167D * 20.0D;
     private static final int JUMP_DURATION_TICKS = 40;
@@ -247,10 +266,49 @@ public class SnotlingEntity extends Monster implements GeoEntity {
     @Override
     protected void defineSynchedData() {
         super.defineSynchedData();
+        this.entityData.define(LONG_FALL, false);
+        this.entityData.define(STUNNED, false);
+        this.entityData.define(STUN_LOOP, false);
         this.entityData.define(CLIMBING, false);
         this.entityData.define(COMBAT_POSE, 0);
         this.entityData.define(RUN_VARIANT, 0);
         this.entityData.define(TALK_VARIANT, 0);
+    }
+
+    public boolean isStunned() {
+        return entityData.get(STUNNED);
+    }
+
+    @Override
+    public void onSyncedDataUpdated(EntityDataAccessor<?> key) {
+        super.onSyncedDataUpdated(key);
+        if (STUNNED.equals(key) && isStunned()) {
+            stunYaw = getYRot();
+            stunBodyYaw = yBodyRot;
+            stunHeadYaw = yHeadRot;
+            stunPitch = getXRot();
+        }
+    }
+
+    @Override
+    protected void checkFallDamage(double dy, boolean landed, net.minecraft.world.level.block.state.BlockState state, BlockPos pos) {
+        double drop = fallDistance - Math.min(0.0D, dy);
+        if (!level().isClientSide && landed && fallDistance > 0 && drop > 1.00001D && !isStunned() && isAlive() && !isPassenger() && !isInWaterOrBubble() && !isInLava()) {
+            stunPhaseTicks = ACTION_BLEND_TICKS + STUN_SIT_TICKS;
+            stunCycles = 2 + random.nextInt(2);
+            entityData.set(STUNNED, true);
+            endConversation();
+            goalSelector.getRunningGoals().toList().forEach(Goal::stop);
+            getNavigation().stop();
+            setJumping(false);
+            pose(DirtAttackGoal.Pose.NONE);
+        }
+        super.checkFallDamage(dy, landed, state, pos);
+    }
+
+    @Override
+    public boolean isEffectiveAi() {
+        return super.isEffectiveAi() && !isStunned();
     }
 
     public boolean isClimbing() {
@@ -277,6 +335,15 @@ public class SnotlingEntity extends Monster implements GeoEntity {
     @Override
     public void tick() {
         if (!level().isClientSide) {
+            if (stunPhaseTicks > 0 && --stunPhaseTicks == 0) {
+                if (entityData.get(STUN_LOOP)) {
+                    entityData.set(STUNNED, false);
+                    entityData.set(STUN_LOOP, false);
+                } else {
+                    entityData.set(STUN_LOOP, true);
+                    stunPhaseTicks = STUN_SIT_TO_LOOP_BLEND_TICKS + stunCycles * STUN_CYCLE_TICKS;
+                }
+            }
             updateTent();
             if (climbCooldown > 0) --climbCooldown;
             if (fleeRetryCooldown > 0) --fleeRetryCooldown;
@@ -289,6 +356,17 @@ public class SnotlingEntity extends Monster implements GeoEntity {
             }
         }
         super.tick();
+        if (!level().isClientSide) {
+            entityData.set(LONG_FALL, isAlive() && !onGround() && fallDistance > 3.0F && !isClimbing() && !isPassenger() && !isInWaterOrBubble() && !isInLava());
+        }
+        if (isStunned()) {
+            setYRot(stunYaw);
+            setXRot(stunPitch);
+            yRotO = stunYaw;
+            xRotO = stunPitch;
+            yBodyRotO = yBodyRot = stunBodyYaw;
+            yHeadRotO = yHeadRot = stunHeadYaw;
+        }
         if (!level().isClientSide && isClimbing()) {
             tickClimb();
         }
@@ -296,6 +374,15 @@ public class SnotlingEntity extends Monster implements GeoEntity {
 
     @Override
     public void travel(Vec3 input) {
+        if (isStunned()) {
+            Vec3 motion = getDeltaMovement();
+            setDeltaMovement(0, Math.min(0, motion.y), 0);
+            if (!onGround()) {
+                move(net.minecraft.world.entity.MoverType.SELF, getDeltaMovement());
+                if (!isNoGravity()) setDeltaMovement(0, (getDeltaMovement().y - 0.08D) * 0.98D, 0);
+            }
+            return;
+        }
         if (isClimbing()) {
             setDeltaMovement(Vec3.ZERO);
             setSpeed(0.0F);
@@ -328,13 +415,30 @@ public class SnotlingEntity extends Monster implements GeoEntity {
     @Override
     public boolean hurt(DamageSource source, float amount) {
         boolean accepted = super.hurt(source, amount);
-        if (accepted && amount > 0 && !level().isClientSide && isAlive()) {
+        if (accepted && !isStunned() && amount > 0 && !level().isClientSide && isAlive()) {
             endConversation();
             socialCooldown = 300 + random.nextInt(301);
             int variant = random.nextInt(3);
             triggerAnim("controller", variant == 0 ? "hit" : "hit" + (variant + 1));
         }
         return accepted;
+    }
+
+    @Override
+    public void die(DamageSource source) {
+        super.die(source);
+        if (dead && !level().isClientSide) {
+            triggerAnim("controller", "death");
+        }
+    }
+
+    @Override
+    protected void tickDeath() {
+        if (!(level() instanceof net.minecraft.server.level.ServerLevel server)) return;
+        if (++deathTime >= DEATH_CLIP_TICKS + DEATH_BLEND_TICKS + 1 && !isRemoved()) {
+            server.sendParticles(net.minecraft.core.particles.ParticleTypes.POOF, getX(), getY() + getBbHeight() * 0.45D, getZ(), 20, getBbWidth() * 0.35D, getBbHeight() * 0.22D, getBbWidth() * 0.35D, 0.025D);
+            remove(Entity.RemovalReason.KILLED);
+        }
     }
 
     @Override
@@ -352,7 +456,7 @@ public class SnotlingEntity extends Monster implements GeoEntity {
     }
 
     private boolean canSocialize() {
-        return insideCamp(position()) && level().getGameTime() >= laughUntil && isAlive() && !isRemoved() && !isNoAi() && !isPassenger() && !isClimbing() && !isFleeing() && !isInWaterOrBubble() && !isInLava() && getTarget() == null && hurtTime == 0;
+        return !isStunned() && insideCamp(position()) && level().getGameTime() >= laughUntil && isAlive() && !isRemoved() && !isNoAi() && !isPassenger() && !isClimbing() && !isFleeing() && !isInWaterOrBubble() && !isInLava() && getTarget() == null && hurtTime == 0;
     }
 
     private void endConversation() {
@@ -683,6 +787,9 @@ public class SnotlingEntity extends Monster implements GeoEntity {
             int combat = entityData.get(COMBAT_POSE);
             if (combat != 0 && !isClimbing() && (combat == DirtAttackGoal.Pose.MOCK.ordinal() || (!isInWaterOrBubble() && !isFleeing())))
                 mode = 30 + combat;
+            if (entityData.get(LONG_FALL)) mode = 5;
+            if (isStunned()) mode = entityData.get(STUN_LOOP) ? STUN_LOOP_MODE : STUN_SIT_MODE;
+            if (isDeadOrDying()) mode = 6;
             var ctrl = event.getController();
 
             if (mode != animationMode) {
@@ -696,6 +803,14 @@ public class SnotlingEntity extends Monster implements GeoEntity {
                 }
 
                 if (mode >= 30 && DirtAttackGoal.Pose.byId(combat).timed) blendTicks = 0;
+                int cancelMode = 30 + DirtAttackGoal.Pose.CANCEL.ordinal();
+                if (mode == STUN_SIT_MODE || animationMode == STUN_LOOP_MODE || mode == cancelMode || animationMode == cancelMode) {
+                    blendTicks = ACTION_BLEND_TICKS;
+                }
+                if (animationMode == STUN_SIT_MODE && mode == STUN_LOOP_MODE) {
+                    blendTicks = STUN_SIT_TO_LOOP_BLEND_TICKS;
+                }
+                if (mode == 6) blendTicks = DEATH_BLEND_TICKS;
                 ctrl.transitionLength(blendTicks);
             } else if (mode == 0 && ctrl.getAnimationState() == AnimationController.State.RUNNING) {
                 ctrl.transitionLength(0);
@@ -707,6 +822,10 @@ public class SnotlingEntity extends Monster implements GeoEntity {
                 locomotionSequence = mode >= 2 ? null : newLocomotionSequence(mode == 1);
             }
             if (mode >= 30) return event.setAndContinue(DirtAttackGoal.Pose.byId(combat).clip);
+            if (mode == 6) return event.setAndContinue(DEATH);
+            if (mode == 5) return event.setAndContinue(FALL);
+            if (mode == STUN_SIT_MODE) return event.setAndContinue(STUN_SIT);
+            if (mode == STUN_LOOP_MODE) return event.setAndContinue(STUN);
             if (mode == 2) {
                 return event.setAndContinue(JUMP);
             }
@@ -726,10 +845,13 @@ public class SnotlingEntity extends Monster implements GeoEntity {
         }) {
             @Override
             public boolean tryTriggerAnimation(String name) {
-                transitionLength(HIT_BLEND_TICKS);
+                if (!name.equals("death") && (isDeadOrDying() || isStunned() || entityData.get(LONG_FALL)))
+                    return false;
+                transitionLength(name.equals("death") ? DEATH_BLEND_TICKS : HIT_BLEND_TICKS);
                 return super.tryTriggerAnimation(name);
             }
         };
+        controller.triggerableAnim("death", DEATH);
         controller.triggerableAnim("hit", RawAnimation.begin().then("hit", Animation.LoopType.PLAY_ONCE));
         controller.triggerableAnim("hit2", RawAnimation.begin().then("hit2", Animation.LoopType.PLAY_ONCE));
         controller.triggerableAnim("hit3", RawAnimation.begin().then("hit3", Animation.LoopType.PLAY_ONCE));

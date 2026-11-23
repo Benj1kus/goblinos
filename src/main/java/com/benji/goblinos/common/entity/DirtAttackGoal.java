@@ -11,7 +11,7 @@ import software.bernie.geckolib.core.animation.RawAnimation;
 
 final class DirtAttackGoal extends Goal {
     enum Pose {
-        NONE(null, false), RUN("run", false), MOCK("mockery", true), SEARCH("search", true), READY("attack_idle", false), READY2("attack_idle2", false), FORWARD("attack_walk", false), BACK("attack_walk_behind", false), THROW("attack", true);
+        NONE(null, false), RUN("run", false), MOCK("mockery", true), SEARCH("search", true), READY("attack_idle", false), READY2("attack_idle2", false), FORWARD("attack_walk", false), BACK("attack_walk_behind", false), THROW("attack", true), CANCEL("attack_cancel", true);
 
         private static final Pose[] POSES = values();
         final RawAnimation clip;
@@ -20,7 +20,8 @@ final class DirtAttackGoal extends Goal {
         Pose(String name, boolean timed) {
             this.timed = timed;
             if (name == null) clip = null;
-            else if (name.equals("search") || name.equals("attack")) clip = RawAnimation.begin().thenPlayAndHold(name);
+            else if (name.equals("search") || name.equals("attack") || name.equals("attack_cancel"))
+                clip = RawAnimation.begin().thenPlayAndHold(name);
             else clip = RawAnimation.begin().thenLoop(name);
         }
 
@@ -29,9 +30,12 @@ final class DirtAttackGoal extends Goal {
         }
     }
 
-    private enum Phase {RANGE, SEARCH, AIM, THROW, COOLDOWN, CELEBRATE}
+    private enum Phase {RANGE, SEARCH, AIM, THROW, COOLDOWN, CELEBRATE, CANCEL}
 
     private static final int ATTACK_COOLDOWN_TICKS = 100;
+    private static final int MAX_AIM_TICKS = 100;
+    private static final double CANCEL_DISTANCE = 12.0D;
+    private static final int CANCEL_TICKS = 60 + SnotlingEntity.ACTION_BLEND_TICKS;
     private long nextAttackTime;
     private static final int RELEASE_TICK = 6;
     private static final int THROW_TICKS = 20;
@@ -63,7 +67,12 @@ final class DirtAttackGoal extends Goal {
 
     @Override
     public boolean canContinueToUse() {
-        return target != null && valid(target) && mob.getTarget() == target;
+        if (mob.isStunned() || !mob.isAlive() || mob.isPassenger() || mob.isInWaterOrBubble()) return false;
+        return phase == Phase.CANCEL || phase == Phase.AIM || hasCurrentTarget();
+    }
+
+    private boolean hasCurrentTarget() {
+        return target != null && mob.getTarget() == target && valid(target);
     }
 
     @Override
@@ -92,6 +101,7 @@ final class DirtAttackGoal extends Goal {
         backstepDetour = null;
         mob.getNavigation().stop();
         switch (next) {
+            case CANCEL -> mob.pose(Pose.CANCEL);
             case RANGE -> mob.pose(Pose.NONE);
             case CELEBRATE -> mob.pose(Pose.MOCK);
             case SEARCH -> mob.pose(Pose.SEARCH);
@@ -107,8 +117,20 @@ final class DirtAttackGoal extends Goal {
 
     @Override
     public void tick() {
-        if (mob.isClimbing()) return;
+        if (phase == Phase.AIM && (!hasCurrentTarget() || mob.distanceToSqr(target) > CANCEL_DISTANCE * CANCEL_DISTANCE || age >= MAX_AIM_TICKS)) {
+            enter(Phase.CANCEL);
+            return;
+        }
+        if (mob.isClimbing() && phase != Phase.AIM) return;
         ++age;
+        if (phase == Phase.CANCEL) {
+            if (age >= CANCEL_TICKS) {
+                nextAttackTime = mob.level().getGameTime() + ATTACK_COOLDOWN_TICKS;
+                enter(Phase.COOLDOWN);
+            }
+            return;
+        }
+        if (!hasCurrentTarget() || mob.isClimbing()) return;
         if (phase != Phase.COOLDOWN) mob.getLookControl().setLookAt(target, 60, 60);
         switch (phase) {
             case RANGE -> {
