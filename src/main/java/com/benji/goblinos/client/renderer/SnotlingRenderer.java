@@ -49,16 +49,17 @@ public class SnotlingRenderer extends GeoEntityRenderer<SnotlingEntity> {
         Matrix4f pose = poseStack.last().pose();
         Matrix3f normal = poseStack.last().normal();
         VertexConsumer buffer = bufferSource.getBuffer(RenderType.entityTranslucent(sprite));
+        int alpha = warning > 0 ? 153 : 255;
         float halfWidth = width * 0.5F;
-        vertex(buffer, pose, normal, -halfWidth, 0, 0, 1);
-        vertex(buffer, pose, normal, halfWidth, 0, 1, 1);
-        vertex(buffer, pose, normal, halfWidth, ICON_HEIGHT, 1, 0);
-        vertex(buffer, pose, normal, -halfWidth, ICON_HEIGHT, 0, 0);
+        vertex(buffer, pose, normal, -halfWidth, 0, 0, 1, alpha);
+        vertex(buffer, pose, normal, halfWidth, 0, 1, 1, alpha);
+        vertex(buffer, pose, normal, halfWidth, ICON_HEIGHT, 1, 0, alpha);
+        vertex(buffer, pose, normal, -halfWidth, ICON_HEIGHT, 0, 0, alpha);
         poseStack.popPose();
     }
 
-    private static void vertex(VertexConsumer buffer, Matrix4f pose, Matrix3f normal, float x, float y, float u, float v) {
-        buffer.vertex(pose, x, y, 0.0F).color(255, 255, 255, 255).uv(u, v).overlayCoords(OverlayTexture.NO_OVERLAY).uv2(15728880).normal(normal, 0.0F, 0.0F, 1.0F).endVertex();
+    private static void vertex(VertexConsumer buffer, Matrix4f pose, Matrix3f normal, float x, float y, float u, float v, int alpha) {
+        buffer.vertex(pose, x, y, 0.0F).color(255, 255, 255, alpha).uv(u, v).overlayCoords(OverlayTexture.NO_OVERLAY).uv2(15728880).normal(normal, 0.0F, 0.0F, 1.0F).endVertex();
     }
 
     @Override
