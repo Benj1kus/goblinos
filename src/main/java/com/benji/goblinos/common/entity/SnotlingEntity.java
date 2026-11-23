@@ -8,7 +8,7 @@ import net.minecraftforge.event.entity.living.LivingDeathEvent;
 import net.minecraftforge.eventbus.api.EventPriority;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
-import net.minecraft.world.entity.ai.goal.LookAtPlayerGoal;
+import net.minecraft.world.entity.ai.goal.RandomLookAroundGoal;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -46,6 +46,69 @@ import software.bernie.geckolib.util.GeckoLibUtil;
 
 @Mod.EventBusSubscriber(modid = Goblinos.MODID)
 public class SnotlingEntity extends Monster implements GeoEntity {
+    final SnotlingAwareness awareness = new SnotlingAwareness();
+    private static final EntityDataAccessor<Integer> WARN_FRAME = SynchedEntityData.defineId(SnotlingEntity.class, EntityDataSerializers.INT);
+    private static final EntityDataAccessor<Integer> ALERT_MOTION = SynchedEntityData.defineId(SnotlingEntity.class, EntityDataSerializers.INT);
+    private static final RawAnimation ANXIOUS_IDLE = RawAnimation.begin().thenLoop("anxiety");
+    private static final RawAnimation ANXIOUS_IDLE_2 = RawAnimation.begin().thenLoop("anxiety2");
+    private int alertVariant;
+    private int movingUntil;
+
+    private static final RawAnimation ANXIOUS_WALK = RawAnimation.begin().thenLoop("anxiety_walk");
+    private static final RawAnimation ANXIOUS_WALK_2 = RawAnimation.begin().thenLoop("anxiety_walk2");
+
+    public int warningFrame() {
+        return entityData.get(WARN_FRAME);
+    }
+
+    void showWarning(int frame) {
+        if (frame > 0 && warningFrame() == 0) alertVariant = 1 + random.nextInt(2);
+        entityData.set(WARN_FRAME, frame);
+    }
+
+    private class InvestigateNoiseGoal extends Goal {
+        private int nextPath;
+
+        InvestigateNoiseGoal() {
+            setFlags(EnumSet.of(Flag.MOVE, Flag.LOOK));
+        }
+
+        @Override
+        public boolean canUse() {
+            return awareness.source != null && getTarget() == null && !isStunned() && !isPassenger() && !isInWaterOrBubble() && insideCamp(position());
+        }
+
+        @Override
+        public void start() {
+            nextPath = 0;
+        }
+
+        @Override
+        public void tick() {
+            Vec3 sound = awareness.source;
+            if (sound == null || getTarget() != null) return;
+            getLookControl().setLookAt(sound.x, sound.y + 0.5, sound.z, 12, 10);
+            if (position().distanceToSqr(sound) < 2.25) {
+                getNavigation().stop();
+                return;
+            }
+            if (tickCount < nextPath) return;
+            nextPath = tickCount + 16;
+            Vec3 destination = sound;
+            if (!insideCamp(destination)) {
+                Vec3 center = Vec3.atBottomCenterOf(homeTent);
+                destination = center.add(sound.subtract(center).normalize().scale(TENT_RADIUS - 1));
+            }
+            Path path = getNavigation().createPath(BlockPos.containing(destination), 1);
+            if (pathInsideCamp(path)) getNavigation().moveTo(path, 0.55D);
+        }
+
+        @Override
+        public void stop() {
+            getNavigation().stop();
+        }
+    }
+
     private static final EntityDataAccessor<Boolean> CLIMBING = SynchedEntityData.defineId(SnotlingEntity.class, EntityDataSerializers.BOOLEAN);
 
     private static final EntityDataAccessor<Boolean> STUNNED = SynchedEntityData.defineId(SnotlingEntity.class, EntityDataSerializers.BOOLEAN);
@@ -266,6 +329,8 @@ public class SnotlingEntity extends Monster implements GeoEntity {
     @Override
     protected void defineSynchedData() {
         super.defineSynchedData();
+        entityData.define(WARN_FRAME, 0);
+        entityData.define(ALERT_MOTION, 0);
         this.entityData.define(LONG_FALL, false);
         this.entityData.define(STUNNED, false);
         this.entityData.define(STUN_LOOP, false);
@@ -323,13 +388,20 @@ public class SnotlingEntity extends Monster implements GeoEntity {
     protected void registerGoals() {
         this.goalSelector.addGoal(0, new DeathMockeryGoal());
         this.goalSelector.addGoal(0, new FloatGoal(this));
-        this.targetSelector.addGoal(1, new NearestAttackableTargetGoal<>(this, Player.class, true, false));
+        this.targetSelector.addGoal(1, new NearestAttackableTargetGoal<Player>(this, Player.class, true, false) {
+            @Override
+            public boolean canUse() {
+                this.target = awareness.detected;
+                return this.target != null;
+            }
+        });
         this.goalSelector.addGoal(1, new FleeOnceGoal());
         this.goalSelector.addGoal(2, new ConversationGoal());
         this.goalSelector.addGoal(3, new DirtAttackGoal(this));
+        this.goalSelector.addGoal(4, new InvestigateNoiseGoal());
         this.goalSelector.addGoal(4, new ReturnToTentGoal());
         this.goalSelector.addGoal(5, new CampStrollGoal());
-        this.goalSelector.addGoal(6, new LookAtPlayerGoal(this, Player.class, 8.0F));
+        this.goalSelector.addGoal(6, new RandomLookAroundGoal(this));
     }
 
     @Override
@@ -345,6 +417,7 @@ public class SnotlingEntity extends Monster implements GeoEntity {
                 }
             }
             updateTent();
+            awareness.tick(this);
             if (climbCooldown > 0) --climbCooldown;
             if (fleeRetryCooldown > 0) --fleeRetryCooldown;
             if (socialCooldown > 0) --socialCooldown;
@@ -355,8 +428,20 @@ public class SnotlingEntity extends Monster implements GeoEntity {
                 finishClimb(true);
             }
         }
+        double beforeX = getX();
+        double beforeZ = getZ();
         super.tick();
         if (!level().isClientSide) {
+            int motion = 0;
+            if (warningFrame() > 0) {
+                double dx = getX() - beforeX;
+                double dz = getZ() - beforeZ;
+                if (dx * dx + dz * dz > 0.000004D) movingUntil = tickCount + 4;
+                motion = tickCount < movingUntil ? alertVariant : -alertVariant;
+            } else {
+                movingUntil = 0;
+            }
+            entityData.set(ALERT_MOTION, motion);
             entityData.set(LONG_FALL, isAlive() && !onGround() && fallDistance > 3.0F && !isClimbing() && !isPassenger() && !isInWaterOrBubble() && !isInLava());
         }
         if (isStunned()) {
@@ -456,7 +541,7 @@ public class SnotlingEntity extends Monster implements GeoEntity {
     }
 
     private boolean canSocialize() {
-        return !isStunned() && insideCamp(position()) && level().getGameTime() >= laughUntil && isAlive() && !isRemoved() && !isNoAi() && !isPassenger() && !isClimbing() && !isFleeing() && !isInWaterOrBubble() && !isInLava() && getTarget() == null && hurtTime == 0;
+        return awareness.source == null && !isStunned() && insideCamp(position()) && level().getGameTime() >= laughUntil && isAlive() && !isRemoved() && !isNoAi() && !isPassenger() && !isClimbing() && !isFleeing() && !isInWaterOrBubble() && !isInLava() && getTarget() == null && hurtTime == 0;
     }
 
     private void endConversation() {
@@ -519,7 +604,7 @@ public class SnotlingEntity extends Monster implements GeoEntity {
         public boolean canUse() {
             if (hasFled || fleeRetryCooldown > 0 || !isAlive() || isNoAi() || isPassenger() || isClimbing() || isInWaterOrBubble() || isInLava() || getHealth() >= getMaxHealth() * 0.5F)
                 return false;
-            Player threat = getLastHurtByMob() instanceof Player attacker ? attacker : getTarget() instanceof Player targetPlayer ? targetPlayer : level().getNearestPlayer(SnotlingEntity.this, 12.0D);
+            Player threat = getLastHurtByMob() instanceof Player attacker ? attacker : getTarget() instanceof Player targetPlayer ? targetPlayer : null;
             if (threat == null || !threat.isAlive() || threat.isCreative() || threat.isSpectator() || distanceToSqr(threat) > 256.0D)
                 return false;
             fleeRetryCooldown = 20;
@@ -784,6 +869,15 @@ public class SnotlingEntity extends Monster implements GeoEntity {
     public void registerControllers(AnimatableManager.ControllerRegistrar controllers) {
         AnimationController<SnotlingEntity> controller = new AnimationController<>(this, "controller", MOVEMENT_BLEND_TICKS, event -> {
             int mode = isClimbing() ? 2 : isInWaterOrBubble() ? 3 : isTalking() ? 10 + entityData.get(TALK_VARIANT) : isFleeing() ? 20 + entityData.get(RUN_VARIANT) : (event.isMoving() ? 1 : 0);
+            if (mode <= 1) {
+                mode = switch (entityData.get(ALERT_MOTION)) {
+                    case 1 -> 8;
+                    case 2 -> 9;
+                    case -1 -> 14;
+                    case -2 -> 15;
+                    default -> mode;
+                };
+            }
             int combat = entityData.get(COMBAT_POSE);
             if (combat != 0 && !isClimbing() && (combat == DirtAttackGoal.Pose.MOCK.ordinal() || (!isInWaterOrBubble() && !isFleeing())))
                 mode = 30 + combat;
@@ -822,6 +916,10 @@ public class SnotlingEntity extends Monster implements GeoEntity {
                 locomotionSequence = mode >= 2 ? null : newLocomotionSequence(mode == 1);
             }
             if (mode >= 30) return event.setAndContinue(DirtAttackGoal.Pose.byId(combat).clip);
+            if (mode == 14) return event.setAndContinue(ANXIOUS_IDLE);
+            if (mode == 15) return event.setAndContinue(ANXIOUS_IDLE_2);
+            if (mode == 8) return event.setAndContinue(ANXIOUS_WALK);
+            if (mode == 9) return event.setAndContinue(ANXIOUS_WALK_2);
             if (mode == 6) return event.setAndContinue(DEATH);
             if (mode == 5) return event.setAndContinue(FALL);
             if (mode == STUN_SIT_MODE) return event.setAndContinue(STUN_SIT);
